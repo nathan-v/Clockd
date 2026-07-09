@@ -216,3 +216,17 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# AI model memory/context files
+CLAUDE.md
+CLAUDE.local.md
+.claude/
+AGENTS.md
+CODEX.md
+.codex/
+.opencode/
+.cursorrules
+.cursor/
+.aider*
+.copilot/
+*.pt

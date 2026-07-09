@@ -1,0 +1,22 @@
+camera_id: "front_yard"
+description: "Front yard camera, ~90 degrees to road"
+resolution: [1920, 1080]
+
+calibration:
+  source_points:
+    - [100, 400]
+    - [700, 400]
+    - [900, 700]
+    - [50, 700]
+  target_width_m: 8.0
+  target_height_m: 40.0
+
+roi_polygon: null
+model_override: null       # e.g. "yolo11m.pt" for better accuracy on GPU
+confidence_override: null
+min_detections: 10
+smoothing_window: 5
+speed_calibration_factor: 1.0  # actual_speed / reported_speed
+speed_range:
+  min_mph: 3.0
+  max_mph: 150.0
