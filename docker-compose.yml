@@ -1,0 +1,45 @@
+services:
+  clockd-cpu:
+    build:
+      context: .
+      target: cpu
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./configs:/app/configs:ro
+    read_only: true
+    tmpfs:
+      - /tmp/clockd_uploads:size=2G
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+
+  clockd-gpu:
+    build:
+      context: .
+      target: gpu
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./configs:/app/configs:ro
+    read_only: true
+    tmpfs:
+      - /tmp/clockd_uploads:size=2G
+    cap_drop:
+      - ALL
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 8G
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - gpu

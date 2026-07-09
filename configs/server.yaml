@@ -1,0 +1,61 @@
+host: "0.0.0.0"
+port: 8000
+verbose: false
+detection_backend: "local"  # "local", "roboflow", "localai", or "codeproject_ai"
+model: "yolo26n.pt"
+confidence: 0.3
+default_unit: "mph"
+max_upload_mb: 200
+max_workers: 2
+job_ttl_seconds: 3600
+cameras_dir: "configs/cameras"
+upload_dir: "/tmp/clockd_uploads"
+
+codeproject_ai:
+  url: "http://localhost:32168"
+  timeout: 30
+
+roboflow:
+  url: "http://localhost:9001"
+  model_id: "yolo11n-640"
+  timeout: 30
+
+localai:
+  url: "http://localhost:8080"
+  model: "rfdetr-base"
+  timeout: 30
+
+metrics:
+  prometheus:
+    enabled: false
+    path: "/metrics"
+  influxdb_v1:
+    enabled: false
+    url: "http://localhost:8086"
+    database: "clockd"
+    username: ""
+    password: ""
+    measurement: "vehicle_speed"
+  influxdb_v2:
+    enabled: false
+    url: "http://localhost:8086"
+    token: ""
+    org: ""
+    bucket: "clockd"
+    measurement: "vehicle_speed"
+
+# Event sources — poll NVRs for vehicle detection events and process clips
+# automatically. See README.md for details.
+# event_sources:
+#   home_nvr:
+#     enabled: true
+#     camera_map:
+#       "your-protect-camera-id": "your-clockd-camera-id"
+#     unit: "mph"
+#     unifi:
+#       host: "192.168.1.1"
+#       username: "clockd-user"
+#       password: "your-password"
+#       verify_ssl: false
+#       poll_interval_s: 30
+#       event_end_timeout_s: 300
