@@ -15,6 +15,7 @@ from clockd.utils.video import cleanup, read_upload_with_limit, stream_upload_to
 logger = logging.getLogger(__name__)
 
 MAX_IMAGE_BYTES = 50 * 1024 * 1024  # 50MB limit for image uploads
+MAX_IMAGE_DIM = 16384  # max pixels per side — a small file can decode to a huge frame
 
 router = APIRouter(prefix="/calibrate", tags=["calibrate"])
 
@@ -24,6 +25,12 @@ def _decode_image(data: bytes) -> np.ndarray:
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(status_code=400, detail="Could not decode image")
+    h, w = img.shape[:2]
+    if w > MAX_IMAGE_DIM or h > MAX_IMAGE_DIM:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Image dimensions {w}x{h} exceed the {MAX_IMAGE_DIM}px limit",
+        )
     return img
 
 

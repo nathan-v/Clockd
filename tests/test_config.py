@@ -46,3 +46,34 @@ def test_load_cameras_empty_dir(tmp_path):
     cam_dir.mkdir()
     cameras = load_cameras(str(cam_dir))
     assert cameras == {}
+
+
+def test_env_overrides_yaml(tmp_path, monkeypatch):
+    path = tmp_path / "server.yaml"
+    path.write_text(yaml.dump({"port": 9000}))
+    monkeypatch.setenv("CLOCKD_PORT", "9100")
+    cfg = load_server_config(str(path))
+    assert cfg.port == 9100
+
+
+def test_nested_env_secrets_merge_with_yaml(tmp_path, monkeypatch):
+    path = tmp_path / "server.yaml"
+    path.write_text(
+        yaml.dump(
+            {
+                "metrics": {"influxdb_v2": {"enabled": True, "url": "http://influx:8086"}},
+                "event_sources": {"home_nvr": {"enabled": True, "unifi": {"host": "10.0.0.1"}}},
+            }
+        )
+    )
+    monkeypatch.setenv("CLOCKD_METRICS__INFLUXDB_V2__TOKEN", "tok123")
+    monkeypatch.setenv("CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__PASSWORD", "s3cret")
+    cfg = load_server_config(str(path))
+    # Env-provided secrets land in the right nested fields...
+    assert cfg.metrics.influxdb_v2.token == "tok123"
+    assert cfg.event_sources["home_nvr"].unifi.password == "s3cret"
+    # ...without clobbering the non-secret YAML values around them
+    assert cfg.metrics.influxdb_v2.enabled is True
+    assert cfg.metrics.influxdb_v2.url == "http://influx:8086"
+    assert cfg.event_sources["home_nvr"].enabled is True
+    assert cfg.event_sources["home_nvr"].unifi.host == "10.0.0.1"

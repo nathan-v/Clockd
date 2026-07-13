@@ -246,3 +246,16 @@ async def test_speed_test_apply_saves_config(client, tmp_path, sample_camera, se
 
     updated_cam = app.state.cameras["test_cam"]
     assert updated_cam.speed_calibration_factor == data["recommended_factor"]
+
+
+@pytest.mark.asyncio
+async def test_preview_rejects_oversized_image(client):
+    img = np.zeros((1, 20000, 3), dtype=np.uint8)
+    _, buf = cv2.imencode(".png", img)
+    resp = await client.post(
+        "/calibrate/preview",
+        data={"camera_id": "test_cam", "detect": "false"},
+        files={"file": ("frame.png", buf.tobytes(), "image/png")},
+    )
+    assert resp.status_code == 400
+    assert "exceed" in resp.json()["detail"]

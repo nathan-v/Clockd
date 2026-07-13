@@ -33,6 +33,12 @@
       "id": "histogram",
       "name": "Histogram",
       "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "stat",
+      "name": "Stat",
+      "version": ""
     }
   ],
   "title": "Clockd - Vehicle Speed Monitoring",
@@ -50,22 +56,230 @@
   },
   "panels": [
     {
+      "title": "Total Detections",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "purple"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"processing_summary\")\n  |> filter(fn: (r) => r._field == \"vehicle_count\")\n  |> group()\n  |> count()\n  |> set(key: \"_field\", value: \"total\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Vehicles >25mph",
+      "type": "stat",
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> filter(fn: (r) => r._value > 25.0)\n  |> group()\n  |> count()\n  |> set(key: \"_field\", value: \"total\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Average Speed",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mph",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "green"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> group()\n  |> mean()\n  |> set(key: \"_field\", value: \"avg\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Top Speed",
+      "type": "stat",
+      "gridPos": {
+        "x": 18,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mph",
+          "decimals": 1,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> group()\n  |> max()\n  |> set(key: \"_field\", value: \"max\")",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          }
+        }
+      ]
+    },
+    {
       "title": "Vehicle Speed (avg, min, max)",
       "type": "timeseries",
       "gridPos": {
-        "h": 10,
-        "w": 24,
         "x": 0,
-        "y": 0
+        "y": 4,
+        "w": 24,
+        "h": 10
       },
       "fieldConfig": {
         "defaults": {
           "unit": "mph",
           "custom": {
             "lineWidth": 2,
-            "pointSize": 6,
-            "drawStyle": "points",
-            "showPoints": "always"
+            "pointSize": 3,
+            "drawStyle": "line",
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth",
+            "thresholdsStyle": {
+              "mode": "area"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "transparent",
+                "value": null
+              },
+              {
+                "color": "rgba(255, 0, 0, 0.1)",
+                "value": 25
+              }
+            ]
           }
         },
         "overrides": [
@@ -113,12 +327,43 @@
                 }
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "raw"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "rgba(255, 255, 255, 0.4)",
+                  "mode": "fixed"
+                }
+              },
+              {
+                "id": "custom.drawStyle",
+                "value": "points"
+              },
+              {
+                "id": "custom.showPoints",
+                "value": "always"
+              },
+              {
+                "id": "custom.pointSize",
+                "value": 3
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 0
+              }
+            ]
           }
         ]
       },
       "targets": [
         {
-          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> aggregateWindow(every: v.windowPeriod, fn: max, createEmpty: false)\n  |> yield(name: \"max\")",
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> drop(columns: [\"track_id\", \"camera_id\", \"unit\"])\n  |> aggregateWindow(every: 15m, fn: max, createEmpty: false)\n  |> set(key: \"_field\", value: \"max\")",
           "refId": "A",
           "datasource": {
             "type": "influxdb",
@@ -126,7 +371,7 @@
           }
         },
         {
-          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)\n  |> yield(name: \"avg\")",
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> drop(columns: [\"track_id\", \"camera_id\", \"unit\"])\n  |> aggregateWindow(every: 15m, fn: mean, createEmpty: false)\n  |> set(key: \"_field\", value: \"avg\")",
           "refId": "B",
           "datasource": {
             "type": "influxdb",
@@ -134,8 +379,16 @@
           }
         },
         {
-          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> aggregateWindow(every: v.windowPeriod, fn: min, createEmpty: false)\n  |> yield(name: \"min\")",
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> drop(columns: [\"track_id\", \"camera_id\", \"unit\"])\n  |> aggregateWindow(every: 15m, fn: min, createEmpty: false)\n  |> set(key: \"_field\", value: \"min\")",
           "refId": "C",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          }
+        },
+        {
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> drop(columns: [\"track_id\", \"camera_id\", \"unit\"])\n  |> set(key: \"_field\", value: \"raw\")",
+          "refId": "D",
           "datasource": {
             "type": "influxdb",
             "uid": "${DS_INFLUXDB}"
@@ -148,21 +401,65 @@
       }
     },
     {
-      "title": "Vehicles Detected",
+      "title": "Speed Distribution",
+      "type": "histogram",
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "mph",
+          "color": {
+            "mode": "palette-classic"
+          }
+        }
+      },
+      "options": {
+        "bucketSize": 5,
+        "combine": false,
+        "fillOpacity": 80,
+        "legendPlacement": "bottom",
+        "legend": {
+          "displayMode": "hidden",
+          "showLegend": false
+        }
+      },
+      "targets": [
+        {
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")\n  |> drop(columns: [\"track_id\", \"camera_id\", \"unit\"])\n  |> group()",
+          "refId": "A",
+          "datasource": {
+            "type": "influxdb",
+            "uid": "${DS_INFLUXDB}"
+          }
+        }
+      ],
+      "datasource": {
+        "type": "influxdb",
+        "uid": "${DS_INFLUXDB}"
+      }
+    },
+    {
+      "title": "Detections",
       "type": "timeseries",
       "gridPos": {
-        "h": 8,
+        "x": 12,
+        "y": 14,
         "w": 12,
-        "x": 0,
-        "y": 10
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
           "unit": "short",
           "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 50,
-            "lineWidth": 1
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           },
           "color": {
             "fixedColor": "purple",
@@ -172,7 +469,7 @@
       },
       "targets": [
         {
-          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"processing_summary\")\n  |> filter(fn: (r) => r._field == \"vehicle_count\")\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)",
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"processing_summary\")\n  |> filter(fn: (r) => r._field == \"vehicle_count\")\n  |> drop(columns: [\"camera_id\"])\n  |> aggregateWindow(every: 15m, fn: count, createEmpty: false)",
           "refId": "A",
           "datasource": {
             "type": "influxdb",
@@ -183,16 +480,22 @@
       "datasource": {
         "type": "influxdb",
         "uid": "${DS_INFLUXDB}"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "showLegend": false
+        }
       }
     },
     {
       "title": "Processing Time",
       "type": "timeseries",
       "gridPos": {
-        "h": 8,
+        "x": 0,
+        "y": 22,
         "w": 12,
-        "x": 12,
-        "y": 10
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
@@ -221,54 +524,22 @@
       "datasource": {
         "type": "influxdb",
         "uid": "${DS_INFLUXDB}"
-      }
-    },
-    {
-      "title": "Speed Distribution",
-      "type": "histogram",
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 18
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "mph",
-          "color": {
-            "mode": "palette-classic"
-          }
-        }
       },
       "options": {
-        "bucketSize": 5,
-        "combine": false,
-        "fillOpacity": 80,
-        "legendPlacement": "bottom"
-      },
-      "targets": [
-        {
-          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"vehicle_speed\")\n  |> filter(fn: (r) => r._field == \"speed_avg\")",
-          "refId": "A",
-          "datasource": {
-            "type": "influxdb",
-            "uid": "${DS_INFLUXDB}"
-          }
+        "legend": {
+          "displayMode": "hidden",
+          "showLegend": false
         }
-      ],
-      "datasource": {
-        "type": "influxdb",
-        "uid": "${DS_INFLUXDB}"
       }
     },
     {
       "title": "Detection Confidence",
       "type": "timeseries",
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
-        "y": 18
+        "y": 22,
+        "w": 12,
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
@@ -299,32 +570,41 @@
       "datasource": {
         "type": "influxdb",
         "uid": "${DS_INFLUXDB}"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "showLegend": false
+        }
       }
     },
     {
-      "title": "HTTP Requests",
+      "title": "Requests / sec",
       "type": "timeseries",
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 0,
-        "y": 26
+        "y": 30,
+        "w": 12,
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "short",
+          "unit": "reqps",
           "custom": {
-            "drawStyle": "bars",
-            "fillOpacity": 30,
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth",
             "stacking": {
-              "mode": "normal"
+              "mode": "none"
             }
           }
         }
       },
       "targets": [
         {
-          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"http_request\")\n  |> filter(fn: (r) => r._field == \"count\")\n  |> group(columns: [\"path\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)",
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"http_request\")\n  |> filter(fn: (r) => r._field == \"count\")\n  |> drop(columns: [\"method\", \"path\", \"status\"])\n  |> aggregateWindow(every: 1m, fn: sum, createEmpty: false)\n  |> map(fn: (r) => ({r with _value: float(v: r._value) / 60.0}))",
           "refId": "A",
           "datasource": {
             "type": "influxdb",
@@ -335,30 +615,38 @@
       "datasource": {
         "type": "influxdb",
         "uid": "${DS_INFLUXDB}"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "showLegend": false
+        }
       }
     },
     {
       "title": "HTTP Request Duration",
       "type": "timeseries",
       "gridPos": {
-        "h": 8,
-        "w": 12,
         "x": 12,
-        "y": 26
+        "y": 30,
+        "w": 12,
+        "h": 8
       },
       "fieldConfig": {
         "defaults": {
           "unit": "s",
           "custom": {
-            "drawStyle": "points",
-            "pointSize": 4,
-            "showPoints": "always"
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true,
+            "lineInterpolation": "smooth"
           }
         }
       },
       "targets": [
         {
-          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"http_request\")\n  |> filter(fn: (r) => r._field == \"duration_s\")\n  |> group(columns: [\"path\"])\n  |> aggregateWindow(every: v.windowPeriod, fn: mean, createEmpty: false)",
+          "query": "from(bucket: \"metrics\")\n  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)\n  |> filter(fn: (r) => r._measurement == \"http_request\")\n  |> filter(fn: (r) => r._field == \"duration_s\")\n  |> drop(columns: [\"method\", \"path\", \"status\"])\n  |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)",
           "refId": "A",
           "datasource": {
             "type": "influxdb",
@@ -369,6 +657,12 @@
       "datasource": {
         "type": "influxdb",
         "uid": "${DS_INFLUXDB}"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "hidden",
+          "showLegend": false
+        }
       }
     }
   ],

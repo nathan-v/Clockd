@@ -239,3 +239,19 @@ def test_check_resolution_mismatch():
 def test_check_resolution_none():
     camera = _make_camera(resolution=None)
     assert _check_resolution(MagicMock(), camera) is None
+
+
+def test_process_video_frame_cap(tmp_path, monkeypatch):
+    import clockd.services.pipeline as pipeline_mod
+
+    video_path = _make_test_video(tmp_path, frames=60)
+    camera = _make_camera()
+    cfg = _make_server_cfg(tmp_path)
+    monkeypatch.setattr(pipeline_mod, "MAX_FRAMES", 30)
+
+    mock_det = _mock_detector_returning(_make_detections([], [], []))
+    with patch("clockd.services.pipeline.create_detector", return_value=mock_det):
+        result = process_video(video_path, camera, cfg, "mph")
+
+    assert result.total_frames == 30
+    assert any("Stopped at 30 frames" in w for w in result.warnings)

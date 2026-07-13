@@ -1,3 +1,9 @@
+# Any setting here can also be set via a CLOCKD_* environment variable, which
+# takes precedence over this file. Nested fields use "__" as the delimiter:
+#   CLOCKD_METRICS__INFLUXDB_V2__TOKEN
+#   CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__PASSWORD
+# Use env vars to keep secrets out of this file (see deploy/k8s-example.yaml).
+
 host: "0.0.0.0"
 port: 8000
 verbose: false
@@ -9,6 +15,7 @@ max_upload_mb: 200
 max_workers: 2
 job_ttl_seconds: 3600
 cameras_dir: "configs/cameras"
+max_cameras: 50
 upload_dir: "/tmp/clockd_uploads"
 
 codeproject_ai:

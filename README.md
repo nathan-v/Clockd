@@ -242,6 +242,17 @@ Server settings in `configs/server.yaml` or via `CLOCKD_` environment variables:
 | `max_upload_mb` | `200` | Max upload size |
 | `max_workers` | `2` | Async job thread pool size |
 | `cameras_dir` | `configs/cameras` | Camera configs directory |
+| `max_cameras` | `50` | Max camera configs the API will create via `POST /cameras` |
+
+Environment variables take precedence over `server.yaml`. Nested settings use `__` as the delimiter, which lets you keep secrets (NVR passwords, InfluxDB tokens) out of the config file entirely and inject them at deploy time — e.g. from a Kubernetes Secret:
+
+```
+CLOCKD_METRICS__INFLUXDB_V2__TOKEN=...
+CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__USERNAME=clockd-user
+CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__PASSWORD=...
+```
+
+A complete hardened Kubernetes deployment (secrets via env vars, non-root, read-only root filesystem, dropped capabilities) is provided at [`deploy/k8s-example.yaml`](deploy/k8s-example.yaml).
 
 ### Detection Backends
 
