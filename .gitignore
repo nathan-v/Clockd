@@ -229,4 +229,5 @@ CODEX.md
 .cursor/
 .aider*
 .copilot/
+graphify-out/
 *.pt

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from clockd.models import ProcessingResult
 from clockd.services.pipeline import process_video
+from clockd.utils.log import sanitize_for_log
 from clockd.utils.video import cleanup, stream_upload_to_disk
 
 logger = logging.getLogger(__name__)
@@ -40,7 +41,7 @@ async def process_endpoint(
         logger.info(
             "Upload received: camera=%s file=%s async=%s unit=%s",
             camera_id,
-            file.filename,
+            sanitize_for_log(file.filename),
             async_mode,
             unit,
         )

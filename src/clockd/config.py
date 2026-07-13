@@ -207,7 +207,22 @@ class MetricsConfig(BaseModel):
 
 
 class ServerConfig(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="CLOCKD_")
+    model_config = SettingsConfigDict(env_prefix="CLOCKD_", env_nested_delimiter="__")
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        # Env vars beat YAML (passed as init kwargs) so secrets can be injected
+        # at deploy time (e.g. from Kubernetes Secrets) without living in the
+        # config file. Nested fields use "__", e.g.
+        # CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__PASSWORD.
+        return (env_settings, init_settings, dotenv_settings, file_secret_settings)
 
     host: str = "0.0.0.0"
     port: int = 8000
@@ -228,6 +243,7 @@ class ServerConfig(BaseSettings):
     max_workers: int = 2
     job_ttl_seconds: int = 3600
     cameras_dir: str = "configs/cameras"
+    max_cameras: int = 50  # max camera configs the API will create
     upload_dir: str = "/tmp/clockd_uploads"
     codeproject_ai: CodeProjectAIConfig = CodeProjectAIConfig()
     roboflow: RoboflowInferenceConfig = RoboflowInferenceConfig()

@@ -1,0 +1,176 @@
+# Example Kubernetes deployment for Clockd.
+#
+# Highlights:
+#   - Secrets (NVR password, InfluxDB token) are injected as CLOCKD_* env vars
+#     from a Secret and never stored in the ConfigMap. Env vars override
+#     server.yaml; nested fields use "__" as the delimiter.
+#   - Hardened pod security context: non-root, read-only root filesystem,
+#     all capabilities dropped, default seccomp profile, no privilege
+#     escalation. Uploads and Ultralytics settings write to an emptyDir
+#     mounted at /tmp.
+#
+# Adjust the namespace, storage class, image, and camera map for your cluster.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clockd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clockd-config
+  namespace: clockd
+data:
+  server.yaml: |
+    host: "0.0.0.0"
+    port: 8000
+    detection_backend: "local"
+    model: "yolo26n.pt"
+    confidence: 0.3
+    default_unit: "mph"
+    max_upload_mb: 200
+    max_workers: 2
+    max_cameras: 50
+    cameras_dir: "/app/configs/cameras"
+    upload_dir: "/tmp/clockd_uploads"
+
+    metrics:
+      influxdb_v2:
+        enabled: false
+        url: "http://influxdb.monitoring:8086"
+        org: "home"
+        bucket: "clockd"
+        # token is injected via CLOCKD_METRICS__INFLUXDB_V2__TOKEN
+
+    event_sources:
+      home_nvr:
+        enabled: false
+        camera_map:
+          "your-protect-camera-id": "your-clockd-camera-id"
+        unit: "mph"
+        unifi:
+          host: "192.168.1.1"
+          verify_ssl: false
+          poll_interval_s: 30
+          event_end_timeout_s: 300
+          # username/password are injected via
+          # CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__USERNAME / __PASSWORD
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: clockd-secrets
+  namespace: clockd
+type: Opaque
+stringData:
+  CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__USERNAME: "clockd-user"
+  CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__PASSWORD: "change-me"
+  CLOCKD_METRICS__INFLUXDB_V2__TOKEN: "change-me"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: clockd-cameras
+  namespace: clockd
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clockd
+  namespace: clockd
+  labels:
+    app: clockd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clockd
+  template:
+    metadata:
+      labels:
+        app: clockd
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        # If your storage provider needs it for the cameras PVC, set fsGroup
+        # to the clockd user's group id from the image.
+      containers:
+        - name: clockd
+          image: ghcr.io/your-registry/clockd:latest
+          ports:
+            - containerPort: 8000
+              name: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          env:
+            # Ultralytics writes its settings file on import; point it at the
+            # writable tmpfs since the root filesystem is read-only.
+            - name: YOLO_CONFIG_DIR
+              value: /tmp/ultralytics
+          envFrom:
+            - secretRef:
+                name: clockd-secrets
+          volumeMounts:
+            - name: config
+              mountPath: /app/configs/server.yaml
+              subPath: server.yaml
+              readOnly: true
+            - name: cameras
+              mountPath: /app/configs/cameras
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: "1"
+              memory: 1Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      volumes:
+        - name: config
+          configMap:
+            name: clockd-config
+        - name: cameras
+          persistentVolumeClaim:
+            claimName: clockd-cameras
+        - name: tmp
+          emptyDir:
+            sizeLimit: 4Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: clockd
+  namespace: clockd
+  labels:
+    app: clockd
+spec:
+  selector:
+    app: clockd
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

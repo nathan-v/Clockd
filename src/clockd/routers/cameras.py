@@ -27,6 +27,12 @@ async def create_camera(camera: CameraConfig, request: Request) -> CameraConfig:
     cameras: dict[str, CameraConfig] = request.app.state.cameras
     if camera.camera_id in cameras:
         raise HTTPException(status_code=409, detail=f"Camera '{camera.camera_id}' already exists")
+    max_cameras = request.app.state.server_cfg.max_cameras
+    if len(cameras) >= max_cameras:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Camera limit reached ({max_cameras}); raise max_cameras in the server config",
+        )
     cameras_dir = request.app.state.server_cfg.cameras_dir
     save_camera(cameras_dir, camera)
     cameras[camera.camera_id] = camera

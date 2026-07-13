@@ -14,7 +14,7 @@ from clockd.models import ProcessingResult, VehicleResult
 from clockd.services.detector import create_detector
 from clockd.services.view_transformer import ViewTransformer
 from clockd.utils.units import convert_speed, mph_to_ms
-from clockd.utils.video import validate_video
+from clockd.utils.video import MAX_FRAMES, validate_video
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +127,13 @@ def process_video(
     frame_idx = 0
 
     while cap.isOpened():
+        # Backstop: container metadata (already validated) can under-report the
+        # real frame count, so cap the decode loop itself too.
+        if frame_idx >= MAX_FRAMES:
+            msg = f"Stopped at {MAX_FRAMES} frames; video contains more frames than its metadata reported"
+            warnings.append(msg)
+            logger.warning("camera=%s: %s", camera.camera_id, msg)
+            break
         ret, frame = cap.read()
         if not ret:
             break
