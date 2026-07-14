@@ -96,6 +96,10 @@ spec:
       labels:
         app: clockd
     spec:
+      # Without this, Kubernetes injects legacy service-link env vars for the
+      # "clockd" Service (CLOCKD_PORT=tcp://<cluster-ip>:8000) that collide
+      # with the CLOCKD_* config env prefix and break startup.
+      enableServiceLinks: false
       securityContext:
         runAsNonRoot: true
         seccompProfile:

@@ -77,3 +77,27 @@ def test_nested_env_secrets_merge_with_yaml(tmp_path, monkeypatch):
     assert cfg.metrics.influxdb_v2.url == "http://influx:8086"
     assert cfg.event_sources["home_nvr"].enabled is True
     assert cfg.event_sources["home_nvr"].unifi.host == "10.0.0.1"
+
+
+def test_k8s_service_link_port_ignored(tmp_path, monkeypatch):
+    # Kubernetes injects CLOCKD_PORT=tcp://<ip>:<port> when a Service named
+    # "clockd" shares the namespace; it must not clobber the YAML port.
+    path = tmp_path / "server.yaml"
+    path.write_text(yaml.dump({"port": 9000}))
+    monkeypatch.setenv("CLOCKD_PORT", "tcp://10.108.181.189:8000")
+    cfg = load_server_config(str(path))
+    assert cfg.port == 9000
+
+
+def test_k8s_service_link_port_ignored_without_yaml(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLOCKD_PORT", "tcp://10.108.181.189:8000")
+    cfg = load_server_config(str(tmp_path / "missing.yaml"))
+    assert cfg.port == 8000
+
+
+def test_real_env_port_still_wins(tmp_path, monkeypatch):
+    path = tmp_path / "server.yaml"
+    path.write_text(yaml.dump({"port": 9000}))
+    monkeypatch.setenv("CLOCKD_PORT", "9100")
+    cfg = load_server_config(str(path))
+    assert cfg.port == 9100

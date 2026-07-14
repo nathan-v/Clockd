@@ -222,7 +222,12 @@ class ServerConfig(BaseSettings):
         # at deploy time (e.g. from Kubernetes Secrets) without living in the
         # config file. Nested fields use "__", e.g.
         # CLOCKD_EVENT_SOURCES__HOME_NVR__UNIFI__PASSWORD.
-        return (env_settings, init_settings, dotenv_settings, file_secret_settings)
+        return (
+            _ignore_k8s_service_links(env_settings),
+            init_settings,
+            dotenv_settings,
+            file_secret_settings,
+        )
 
     host: str = "0.0.0.0"
     port: int = 8000
@@ -250,6 +255,26 @@ class ServerConfig(BaseSettings):
     localai: LocalAIConfig = LocalAIConfig()
     metrics: MetricsConfig = MetricsConfig()
     event_sources: dict[str, UnifiEventSourceConfig] = {}
+
+
+def _ignore_k8s_service_links(env_source):
+    """Wrap the env settings source to drop Kubernetes service-link values.
+
+    A Service named "clockd" makes Kubernetes inject legacy Docker-link vars
+    like CLOCKD_PORT=tcp://<cluster-ip>:8000 into every pod in the namespace,
+    which collides with the CLOCKD_ env prefix and would fail port validation
+    at startup. Prefer enableServiceLinks: false in the pod spec; this guard
+    keeps startup working either way.
+    """
+
+    def _filtered() -> dict:
+        values = env_source()
+        port = values.get("port")
+        if isinstance(port, str) and port.startswith("tcp://"):
+            values.pop("port")
+        return values
+
+    return _filtered
 
 
 def load_server_config(path: str = "configs/server.yaml") -> ServerConfig:
