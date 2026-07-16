@@ -7,7 +7,7 @@ from typing import Optional
 import re
 
 import yaml
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
@@ -148,12 +148,29 @@ class RoboflowInferenceConfig(BaseModel):
     url: str = "http://localhost:9001"
     model_id: str = "yolo11n-640"
     timeout: int = 30
+    # Downscale frames so their longest side is at most this many pixels before
+    # sending to the inference server. The server resizes to the model input size
+    # anyway, so this trades local resize CPU for much smaller encode/transfer
+    # payloads. None sends full-resolution frames (pushes all work to the server).
+    resize_max_px: Optional[int] = Field(default=None, ge=64, le=8192)
 
 
 class LocalAIConfig(BaseModel):
     url: str = "http://localhost:8080"
     model: str = "rfdetr-base"
     timeout: int = 30
+
+
+class CoralAPIConfig(BaseModel):
+    """coralapi Edge TPU inference server (https://github.com/nathan-v/coralapi)."""
+
+    url: str = "http://localhost:8000"
+    model: str = "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu"
+    timeout: int = 30
+    # Same semantics as roboflow.resize_max_px: downscale before upload.
+    # Edge TPU SSD models run at 300x300, so full-res frames are pure
+    # transfer overhead; boxes come back normalized, so no accuracy cost.
+    resize_max_px: Optional[int] = Field(default=None, ge=64, le=8192)
 
 
 class UnifiProtectConfig(BaseModel):
@@ -232,7 +249,19 @@ class ServerConfig(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     verbose: bool = False  # enable detailed logging of processing results
-    detection_backend: str = "local"  # "local", "roboflow", "localai", or "codeproject_ai"
+    detection_backend: str = "local"  # "local", "roboflow", "localai", "codeproject_ai", "coralapi"
+    # "local": if a remote detection_backend is unreachable, fall back to
+    # local CPU inference (using `model`) for the rest of the job. "none":
+    # unreachable backends yield empty detections (logged) as before.
+    detection_fallback: str = "none"
+
+    @field_validator("detection_fallback")
+    @classmethod
+    def _validate_detection_fallback(cls, v: str) -> str:
+        if v not in ("none", "local"):
+            raise ValueError("detection_fallback must be 'none' or 'local'")
+        return v
+
     model: str = "yolo26n.pt"  # validated at startup, must be in ALLOWED_MODELS
 
     @field_validator("model")
@@ -253,6 +282,7 @@ class ServerConfig(BaseSettings):
     codeproject_ai: CodeProjectAIConfig = CodeProjectAIConfig()
     roboflow: RoboflowInferenceConfig = RoboflowInferenceConfig()
     localai: LocalAIConfig = LocalAIConfig()
+    coralapi: CoralAPIConfig = CoralAPIConfig()
     metrics: MetricsConfig = MetricsConfig()
     event_sources: dict[str, UnifiEventSourceConfig] = {}
 

@@ -235,7 +235,8 @@ Server settings in `configs/server.yaml` or via `CLOCKD_` environment variables:
 |---------|---------|-------------|
 | `host` | `0.0.0.0` | Bind address |
 | `port` | `8000` | Bind port |
-| `detection_backend` | `local` | `"local"`, `"roboflow"`, `"localai"`, or `"codeproject_ai"` |
+| `detection_backend` | `local` | `"local"`, `"roboflow"`, `"localai"`, `"codeproject_ai"`, or `"coralapi"` |
+| `detection_fallback` | `none` | `"local"` to fall back to local CPU inference when a remote backend is unreachable |
 | `model` | `yolo26n.pt` | Default YOLO model (local backend only) |
 | `confidence` | `0.3` | Detection confidence threshold |
 | `default_unit` | `mph` | Speed unit (`mph` or `kmh`) |
@@ -286,11 +287,13 @@ All remote backends offload detection to an external server. Clockd sends each f
 | **[Roboflow Inference](https://github.com/roboflow/inference)** | YOLO v8/v10/v11/26, RF-DETR, YOLO-NAS | CUDA + TensorRT | No | Linux, macOS | Very active (daily commits) | GPU server, best model selection |
 | **[LocalAI](https://github.com/mudler/localai)** | RF-DETR | CUDA, ROCm, Vulkan | No | Linux, macOS, Windows | Very active (monthly releases) | Already running LocalAI for LLMs |
 | **[CodeProject.AI](https://github.com/codeproject/CodeProject.AI-Server)** | YOLOv5, v8, v11 | CUDA | Yes (YOLOv5 TFLite) | Windows, Linux, macOS | Slow (last release Dec 2024) | Raspberry Pi + Coral TPU |
+| **[coralapi](https://github.com/nathan-v/coralapi)** | Edge TPU `.tflite` (SSD MobileNet, EfficientDet) | No (TPU only) | Yes (native) | Linux | Active | Dedicated Coral TPU, lowest power |
 
 **Notes:**
 - **Roboflow Inference** is the recommended remote backend. Broadest model support, actively maintained, no API key needed for pre-trained COCO models, and supports TensorRT quantization for maximum GPU throughput. Runs on Linux and macOS only (Docker-based). For GPU use, Linux with the NVIDIA Container Toolkit is recommended.
 - **LocalAI** only supports RF-DETR for object detection (not YOLO). It's a good choice if you already run LocalAI for other AI tasks. Supports the widest range of GPU vendors (NVIDIA, AMD, Intel).
-- **CodeProject.AI** is the only backend with Coral TPU support, via its YOLOv5 TFLite module. This makes it a viable option for low-power deployments like a Raspberry Pi with a Coral accelerator. The project has slowed (volunteer-maintained, 18+ months since last release) but remains functional.
+- **CodeProject.AI** supports Coral TPUs via its YOLOv5 TFLite module. The project has slowed (volunteer-maintained, 18+ months since last release) but remains functional.
+- **coralapi** is a purpose-built Edge TPU inference server (sync/async API, per-request model selection, automatic model download, no GPU required). It serves quantized Edge TPU `.tflite` models — expect SSD-MobileNet-class accuracy, below the larger YOLO models, at single-digit-watt power draw. Detections return normalized boxes, so `coralapi.resize_max_px` costs no accuracy on this backend.
 - For most users, **local + `yolo26n.pt` on CPU** is fast enough. Remote backends are worth it for larger models on GPU, high-volume processing, or shared inference across multiple services.
 
 ##### Backend Configuration
@@ -328,6 +331,20 @@ codeproject_ai:
   url: "http://localhost:32168"
   timeout: 30
 ```
+
+**coralapi:**
+
+```yaml
+detection_backend: "coralapi"
+
+coralapi:
+  url: "http://localhost:8000"
+  model: "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu"
+  timeout: 30
+  resize_max_px: 640   # optional; Edge TPU models run at ~300px anyway
+```
+
+Start the server (Coral Edge TPU required): see the [coralapi quickstart](https://github.com/nathan-v/coralapi#quickstart-docker).
 
 ## Event Sources (NVR Integration)
 

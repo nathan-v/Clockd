@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+import base64
 import json
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
+import cv2
 import numpy as np
+import pytest
 
 from clockd.services.detector import (
     CodeProjectAIDetector,
+    CoralAPIDetector,
+    DetectorUnavailableError,
+    FallbackDetector,
     LocalAIDetector,
     LocalDetector,
     RoboflowInferenceDetector,
@@ -27,7 +33,8 @@ def test_create_detector_codeproject():
         confidence=0.4,
         codeproject_url="http://localhost:32168",
     )
-    assert isinstance(det, CodeProjectAIDetector)
+    assert isinstance(det, FallbackDetector)
+    assert isinstance(det._primary, CodeProjectAIDetector)
 
 
 def test_create_detector_roboflow():
@@ -38,7 +45,8 @@ def test_create_detector_roboflow():
         roboflow_url="http://localhost:9001",
         roboflow_model_id="yolo11n-640",
     )
-    assert isinstance(det, RoboflowInferenceDetector)
+    assert isinstance(det, FallbackDetector)
+    assert isinstance(det._primary, RoboflowInferenceDetector)
 
 
 def test_create_detector_localai():
@@ -49,7 +57,8 @@ def test_create_detector_localai():
         localai_url="http://localhost:8080",
         localai_model="rfdetr-base",
     )
-    assert isinstance(det, LocalAIDetector)
+    assert isinstance(det, FallbackDetector)
+    assert isinstance(det._primary, LocalAIDetector)
 
 
 def test_codeproject_detector_success():
@@ -145,8 +154,8 @@ def test_codeproject_detector_no_predictions():
 
 def test_codeproject_detector_unreachable():
     det = CodeProjectAIDetector(url="http://127.0.0.1:1", confidence=0.3, timeout=1)
-    detections = det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
-    assert len(detections) == 0  # should not raise
+    with pytest.raises(DetectorUnavailableError):
+        det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
 
 
 def test_roboflow_detector_success():
@@ -159,8 +168,13 @@ def test_roboflow_detector_success():
         ]
     }
 
+    received = {}
+
     class Handler(BaseHTTPRequestHandler):
         def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            received["path"] = self.path
+            received["body"] = json.loads(self.rfile.read(length))
             resp = json.dumps(response_data).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
@@ -176,11 +190,19 @@ def test_roboflow_detector_success():
     t = Thread(target=server.handle_request, daemon=True)
     t.start()
 
-    det = RoboflowInferenceDetector(url=f"http://127.0.0.1:{port}", confidence=0.3)
+    det = RoboflowInferenceDetector(
+        url=f"http://127.0.0.1:{port}", model_id="yolo26n-640", confidence=0.3
+    )
     detections = det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
 
     t.join(timeout=5)
     server.server_close()
+
+    # Inference server >=1.x requires model_id and image in the JSON body
+    assert received["path"] == "/infer/object_detection"
+    assert received["body"]["model_id"] == "yolo26n-640"
+    assert received["body"]["image"]["type"] == "base64"
+    assert received["body"]["image"]["value"]
 
     # car + bus (dog is not in LABEL_TO_COCO)
     assert len(detections) == 2
@@ -191,10 +213,68 @@ def test_roboflow_detector_success():
     np.testing.assert_allclose(detections.xyxy[car_idx], [150, 260, 250, 340], atol=1)
 
 
+def test_roboflow_detector_resize_max_px():
+    # Prediction in the downscaled image's pixel space (1280x720 -> 640x360)
+    response_data = {
+        "predictions": [
+            {"class": "car", "confidence": 0.9, "x": 100, "y": 150, "width": 50, "height": 40},
+        ]
+    }
+    received = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            received["body"] = json.loads(self.rfile.read(length))
+            resp = json.dumps(response_data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    t = Thread(target=server.handle_request, daemon=True)
+    t.start()
+
+    det = RoboflowInferenceDetector(
+        url=f"http://127.0.0.1:{port}", confidence=0.3, resize_max_px=640
+    )
+    detections = det.detect(np.zeros((720, 1280, 3), dtype=np.uint8))
+
+    t.join(timeout=5)
+    server.server_close()
+
+    # The uploaded frame must have been downscaled to 640x360
+    img = cv2.imdecode(
+        np.frombuffer(base64.b64decode(received["body"]["image"]["value"]), np.uint8),
+        cv2.IMREAD_COLOR,
+    )
+    assert img.shape[:2] == (360, 640)
+
+    # Boxes come back rescaled to the original 1280x720 space (scale=0.5)
+    assert len(detections) == 1
+    np.testing.assert_allclose(detections.xyxy[0], [150, 260, 250, 340], atol=1)
+
+
+def test_roboflow_detector_resize_noop_when_frame_smaller():
+    # Frame smaller than resize_max_px is sent as-is (resize path must not
+    # crash on small frames; unreachable server then raises)
+    det = RoboflowInferenceDetector(
+        url="http://127.0.0.1:1", confidence=0.3, resize_max_px=640, timeout=1
+    )
+    with pytest.raises(DetectorUnavailableError):
+        det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
+
+
 def test_roboflow_detector_unreachable():
     det = RoboflowInferenceDetector(url="http://127.0.0.1:1", confidence=0.3, timeout=1)
-    detections = det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
-    assert len(detections) == 0
+    with pytest.raises(DetectorUnavailableError):
+        det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
 
 
 def test_localai_detector_success():
@@ -244,5 +324,177 @@ def test_localai_detector_success():
 
 def test_localai_detector_unreachable():
     det = LocalAIDetector(url="http://127.0.0.1:1", confidence=0.3, timeout=1)
+    with pytest.raises(DetectorUnavailableError):
+        det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
+
+
+def test_create_detector_coralapi():
+    det = create_detector(
+        backend="coralapi",
+        model_name="yolo11n.pt",
+        confidence=0.3,
+        coralapi_url="http://localhost:8000",
+        coralapi_model="ssd_mobilenet_v2_coco_quant_postprocess_edgetpu",
+    )
+    assert isinstance(det, FallbackDetector)
+    assert isinstance(det._primary, CoralAPIDetector)
+
+
+def test_coralapi_detector_success():
+    # coralapi returns normalized [ymin, xmin, ymax, xmax] boxes
+    response_data = {
+        "model": "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu",
+        "results": [
+            {"box": [0.25, 0.125, 0.75, 0.375], "index": 2, "label": "car", "score": 0.9},
+            {"box": [0.1, 0.5, 0.4, 0.9], "index": 5, "label": "bus", "score": 0.8},
+            {"box": [0.0, 0.0, 0.2, 0.2], "index": 17, "label": "dog", "score": 0.95},
+            {"box": [0.3, 0.3, 0.6, 0.6], "index": 99, "label": None, "score": 0.7},
+        ],
+    }
+    received = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            received["path"] = self.path
+            received["body"] = self.rfile.read(length)
+            received["content_type"] = self.headers.get("Content-Type", "")
+            resp = json.dumps(response_data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    t = Thread(target=server.handle_request, daemon=True)
+    t.start()
+
+    det = CoralAPIDetector(
+        url=f"http://127.0.0.1:{port}",
+        model="ssd_mobilenet_v2_coco_quant_postprocess_edgetpu",
+        confidence=0.4,
+    )
     detections = det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
-    assert len(detections) == 0
+
+    t.join(timeout=5)
+    server.server_close()
+
+    # model + threshold go in the query string; image is a multipart "file" field
+    assert received["path"].startswith("/v1/vision/detect?")
+    assert "model=ssd_mobilenet_v2_coco_quant_postprocess_edgetpu" in received["path"]
+    assert "threshold=0.4" in received["path"]
+    assert "multipart/form-data" in received["content_type"]
+    assert b'name="file"' in received["body"]
+
+    # car + bus; dog is not a vehicle, null label skipped
+    assert len(detections) == 2
+    assert 2 in detections.class_id
+    assert 5 in detections.class_id
+    # normalized box -> pixel xyxy against the 640x480 frame:
+    # car [ymin .25, xmin .125, ymax .75, xmax .375] -> [80, 120, 240, 360]
+    car_idx = list(detections.class_id).index(2)
+    np.testing.assert_allclose(detections.xyxy[car_idx], [80, 120, 240, 360], atol=1)
+
+
+def test_coralapi_detector_resize_boxes_stay_in_original_space():
+    response_data = {
+        "model": "m",
+        "results": [{"box": [0.5, 0.5, 1.0, 1.0], "index": 2, "label": "car", "score": 0.9}],
+    }
+    received = {}
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            length = int(self.headers.get("Content-Length", 0))
+            received["body"] = self.rfile.read(length)
+            resp = json.dumps(response_data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    t = Thread(target=server.handle_request, daemon=True)
+    t.start()
+
+    det = CoralAPIDetector(url=f"http://127.0.0.1:{port}", confidence=0.3, resize_max_px=640)
+    detections = det.detect(np.zeros((720, 1280, 3), dtype=np.uint8))
+
+    t.join(timeout=5)
+    server.server_close()
+
+    # uploaded image was downscaled (multipart jpeg smaller than raw frame)
+    start = received["body"].index(b"\r\n\r\n", received["body"].index(b'name="file"')) + 4
+    jpeg = received["body"][start : received["body"].rindex(b"\r\n----")]
+    img = cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)
+    assert img.shape[:2] == (360, 640)
+
+    # normalized boxes scale against the ORIGINAL 1280x720 frame
+    np.testing.assert_allclose(detections.xyxy[0], [640, 360, 1280, 720], atol=1)
+
+
+def test_coralapi_detector_unreachable():
+    det = CoralAPIDetector(url="http://127.0.0.1:1", confidence=0.3, timeout=1)
+    with pytest.raises(DetectorUnavailableError):
+        det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
+
+
+def test_coralapi_detector_index_fallback_when_no_labels():
+    # Zoo models without a labels file return label=null; vehicles must be
+    # recovered via the COCO-90 index. Known-but-non-vehicle labels stay skipped.
+    response_data = {
+        "model": "m",
+        "results": [
+            {"box": [0.1, 0.1, 0.5, 0.5], "index": 2, "label": None, "score": 0.6},  # car by index
+            {
+                "box": [0.2, 0.2, 0.6, 0.6],
+                "index": 7,
+                "label": None,
+                "score": 0.5,
+            },  # truck by index
+            {"box": [0.0, 0.0, 0.9, 0.9], "index": 6, "label": None, "score": 0.5},  # train -> skip
+            {
+                "box": [0.3, 0.3, 0.7, 0.7],
+                "index": 2,
+                "label": "dog",
+                "score": 0.9,
+            },  # labeled non-vehicle -> skip
+        ],
+    }
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            resp = json.dumps(response_data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    port = server.server_address[1]
+    t = Thread(target=server.handle_request, daemon=True)
+    t.start()
+
+    det = CoralAPIDetector(url=f"http://127.0.0.1:{port}", confidence=0.3)
+    detections = det.detect(np.zeros((480, 640, 3), dtype=np.uint8))
+
+    t.join(timeout=5)
+    server.server_close()
+
+    assert len(detections) == 2
+    assert 2 in detections.class_id  # car via index fallback
+    assert 7 in detections.class_id  # truck via index fallback

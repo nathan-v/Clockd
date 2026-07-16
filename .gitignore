@@ -231,3 +231,8 @@ CODEX.md
 .copilot/
 graphify-out/
 *.pt
+
+# Local working docs and benchmark artifacts (kept out of the repo)
+*.local.md
+*.local.py
+sweep-results/
