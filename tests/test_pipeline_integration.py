@@ -255,3 +255,69 @@ def test_process_video_frame_cap(tmp_path, monkeypatch):
 
     assert result.total_frames == 30
     assert any("Stopped at 30 frames" in w for w in result.warnings)
+
+
+def test_process_video_min_displacement_filters_stationary_jitter(tmp_path):
+    # A parked vehicle with jittery boxes: oscillates +/-3px around a fixed
+    # spot, so net real-world displacement is near zero. With a displacement
+    # floor it must be excluded; without one it leaks through as a low-speed
+    # phantom whenever the speed floor is disabled.
+    video_path = _make_test_video(tmp_path, fps=30, frames=30)
+    cfg = _make_server_cfg(tmp_path)
+
+    def jitter_detector():
+        frame_count = [0]
+
+        def detect_fn(frame):
+            idx = frame_count[0]
+            frame_count[0] += 1
+            wobble = 3 if idx % 2 else -3
+            return _make_detections([[100 + wobble, 200, 180 + wobble, 280]], [2], [0.85])
+
+        return _mock_detector_returning(detect_fn)
+
+    camera = _make_camera(
+        min_detections=2,
+        smoothing_window=1,
+        speed_range=SpeedRange(min_mph=0.0, max_mph=200.0),
+        min_displacement_m=5.0,
+    )
+    with patch("clockd.services.pipeline.create_detector", return_value=jitter_detector()):
+        result = process_video(video_path, camera, cfg, "mph")
+    assert len(result.vehicles) == 0
+    assert result.vehicles_filtered > 0
+
+    # Control: same scene with the filter disabled leaks the phantom track.
+    camera = _make_camera(
+        min_detections=2,
+        smoothing_window=1,
+        speed_range=SpeedRange(min_mph=0.0, max_mph=200.0),
+        min_displacement_m=0.0,
+    )
+    with patch("clockd.services.pipeline.create_detector", return_value=jitter_detector()):
+        result = process_video(video_path, camera, cfg, "mph")
+    assert len(result.vehicles) == 1
+
+
+def test_process_video_min_displacement_keeps_moving_vehicle(tmp_path):
+    # A genuinely moving vehicle must survive the displacement floor.
+    video_path = _make_test_video(tmp_path, fps=30, frames=30)
+    cfg = _make_server_cfg(tmp_path)
+    camera = _make_camera(
+        min_detections=2,
+        smoothing_window=1,
+        speed_range=SpeedRange(min_mph=0.0, max_mph=200.0),
+        min_displacement_m=5.0,
+    )
+
+    frame_count = [0]
+
+    def detect_fn(frame):
+        idx = frame_count[0]
+        frame_count[0] += 1
+        return _make_detections([[100 + idx * 15, 200, 180 + idx * 15, 280]], [2], [0.85])
+
+    mock_det = _mock_detector_returning(detect_fn)
+    with patch("clockd.services.pipeline.create_detector", return_value=mock_det):
+        result = process_video(video_path, camera, cfg, "mph")
+    assert len(result.vehicles) == 1

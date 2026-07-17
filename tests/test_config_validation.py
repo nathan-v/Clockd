@@ -107,3 +107,24 @@ def test_speed_range_negative():
 def test_speed_range_too_high():
     with pytest.raises(ValidationError, match="Speed"):
         SpeedRange(max_mph=600.0)
+
+
+def test_min_displacement_validation():
+    import pytest
+
+    from clockd.config import CameraConfig
+
+    base = {
+        "camera_id": "t",
+        "calibration": {
+            "source_points": [[0, 0], [100, 0], [100, 100], [0, 100]],
+            "target_width_m": 10.0,
+            "target_height_m": 10.0,
+        },
+    }
+    assert CameraConfig(**base).min_displacement_m == 0.0
+    assert CameraConfig(**base, min_displacement_m=7.5).min_displacement_m == 7.5
+    with pytest.raises(ValueError):
+        CameraConfig(**base, min_displacement_m=-1.0)
+    with pytest.raises(ValueError):
+        CameraConfig(**base, min_displacement_m=1001.0)

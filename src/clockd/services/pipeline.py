@@ -219,6 +219,13 @@ def process_video(
         # non-uniform homography distortion — only the endpoints matter,
         # each already stabilized by the smoothing window.
         displacement = np.linalg.norm(smoothed[-1] - smoothed[0])
+
+        # Displacement floor: a real vehicle crosses ground; a stationary
+        # vehicle's jitter fragments produce only meters of net movement.
+        if displacement < camera.min_displacement_m:
+            filtered_count += 1
+            continue
+
         avg_speed_ms = displacement / total_time
 
         # Apply calibration factor
@@ -276,7 +283,8 @@ def process_video(
 
     if filtered_count > 0:
         warnings.append(
-            f"{filtered_count} vehicle(s) excluded by min_detections or speed_range filters"
+            f"{filtered_count} vehicle(s) excluded by min_detections, "
+            f"min_displacement_m, or speed_range filters"
         )
 
     processing_time = round(time.time() - t0, 2)

@@ -99,6 +99,13 @@ class CameraConfig(BaseModel):
     min_detections: int = 10
     smoothing_window: int = 5
     speed_range: SpeedRange = SpeedRange()
+    # Minimum real-world distance (meters) a track must travel to count as a
+    # vehicle. Stationary vehicles with jittery bounding boxes fragment into
+    # short tracks whose small net movement over a short window reads as a
+    # plausible low speed; a displacement floor removes those without
+    # penalizing fast vehicles the way a higher min_detections would.
+    # 0 disables the filter.
+    min_displacement_m: float = 0.0
     speed_calibration_factor: float = 1.0  # multiply all speeds by this value
 
     @field_validator("confidence_override")
@@ -113,6 +120,13 @@ class CameraConfig(BaseModel):
     def validate_min_detections(cls, v: int) -> int:
         if v < 2 or v > 10000:
             raise ValueError("min_detections must be between 2 and 10000")
+        return v
+
+    @field_validator("min_displacement_m")
+    @classmethod
+    def validate_min_displacement(cls, v: float) -> float:
+        if v < 0 or v > 1000:
+            raise ValueError("min_displacement_m must be between 0 and 1000 meters")
         return v
 
     @field_validator("smoothing_window")
