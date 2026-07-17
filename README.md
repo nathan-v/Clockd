@@ -219,7 +219,7 @@ All speeds for that camera will be multiplied by this factor. Do 2-3 passes at d
 
 **Filtering settings:**
 - `min_detections: 10` - a vehicle tracked for only 2-3 frames produces unreliable speed. 10+ detections gives stable estimates.
-- `min_displacement_m` - a track must physically travel this many meters to count. Parked vehicles with jittery bounding boxes fragment into short tracks that read as plausible 3-10 mph "vehicles"; a floor of 5-10m (for a 30m+ calibrated zone) removes them without penalizing fast vehicles the way a higher `min_detections` would. Default 0 (disabled) for backward compatibility.
+- `min_displacement_m` - a track must physically travel this many meters to count. Parked vehicles with jittery bounding boxes fragment into short tracks that read as plausible 3-10 mph "vehicles", and track breaks on real vehicles create duplicate counts. A good rule of thumb is half your calibrated zone length (e.g. 15m for a 33m zone): any through-vehicle tracked across half the zone survives at any speed, while jitter phantoms and most duplicate fragments are removed. Default 0 (disabled) for backward compatibility.
 - `smoothing_window: 5` - reduces bounding box jitter between frames. Higher values = smoother but may round off genuine speed changes. 3-7 is the sweet spot.
 - `speed_range` - set `max_mph` to something reasonable for your road (residential: 45, collector: 55, highway: 85). This filters out tracking glitches that show 200+ mph.
 
