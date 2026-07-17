@@ -45,8 +45,13 @@ async def update_camera(camera_id: str, camera: CameraConfig, request: Request) 
     if camera_id not in cameras:
         raise HTTPException(status_code=404, detail=f"Camera '{camera_id}' not found")
     cameras_dir = request.app.state.server_cfg.cameras_dir
-    # If camera_id in the path differs from the body, rename the file
+    # If camera_id in the path differs from the body, rename the file — but
+    # never overwrite a different existing camera in the process.
     if camera.camera_id != camera_id:
+        if camera.camera_id in cameras:
+            raise HTTPException(
+                status_code=409, detail=f"Camera '{camera.camera_id}' already exists"
+            )
         delete_camera_file(cameras_dir, camera_id)
         del cameras[camera_id]
     save_camera(cameras_dir, camera)
