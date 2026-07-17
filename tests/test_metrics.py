@@ -157,3 +157,26 @@ def test_influxdb_unreachable_does_not_raise():
     svc = MetricsService(cfg)
     # Should log warning but not raise
     svc.record(_make_result())
+
+
+def test_line_protocol_detection_tags():
+    svc = MetricsService(MetricsConfig())
+    result = _make_result()
+    result.detection_backend = "roboflow"
+    result.detection_model = "yolo26l-640"
+    result.detection_fallback = False
+    lines = svc._build_line_protocol(result, "vehicle_speed").split("\n")
+
+    for line in lines:
+        assert "backend=roboflow" in line
+        assert "model=yolo26l-640" in line
+        assert "fallback=false" in line
+
+    # fallback run is tagged with what actually performed detection
+    result.detection_backend = "local"
+    result.detection_model = "yolo26n.pt"
+    result.detection_fallback = True
+    line = svc._build_line_protocol(result, "vehicle_speed").split("\n")[0]
+    assert "backend=local" in line
+    assert "model=yolo26n.pt" in line
+    assert "fallback=true" in line

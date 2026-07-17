@@ -8,6 +8,10 @@ host: "0.0.0.0"
 port: 8000
 verbose: false
 detection_backend: "local"  # "local", "roboflow", "localai", or "codeproject_ai"
+# Optional: fall back to local CPU inference (using `model`) when a remote
+# detection backend is unreachable. "none" (default) keeps the old behavior
+# of logging and yielding empty detections.
+# detection_fallback: "local"
 model: "yolo26n.pt"
 confidence: 0.3
 default_unit: "mph"
@@ -26,6 +30,19 @@ roboflow:
   url: "http://localhost:9001"
   model_id: "yolo11n-640"
   timeout: 30
+  # Optional: downscale frames to this longest-side size before sending.
+  # The server resizes to the model input anyway; enabling this trades a
+  # little local CPU for much smaller uploads. Omit to send full frames.
+  # resize_max_px: 640
+
+# coralapi Edge TPU server (https://github.com/nathan-v/coralapi)
+coralapi:
+  url: "http://localhost:8000"
+  model: "ssd_mobilenet_v2_coco_quant_postprocess_edgetpu"
+  timeout: 30
+  # Edge TPU SSD models run at 300x300; downscaling before upload saves
+  # bandwidth with no accuracy cost (boxes are returned normalized).
+  # resize_max_px: 640
 
 localai:
   url: "http://localhost:8080"

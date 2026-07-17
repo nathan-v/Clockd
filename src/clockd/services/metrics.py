@@ -90,9 +90,19 @@ class MetricsService:
     def _build_line_protocol(self, result: ProcessingResult, measurement: str) -> str:
         lines = []
         ts_ns = int(time.time() * 1e9)
+        # what actually ran, so dashboards can split by model and CPU-vs-GPU
+        # backend (and alert on fallback frequency)
+        detect_tags = (
+            f"backend={_escape_tag(result.detection_backend or 'unknown')}"
+            f",model={_escape_tag(result.detection_model or 'unknown')}"
+            f",fallback={str(result.detection_fallback).lower()}"
+        )
         for v in result.vehicles:
             cam_id = _escape_tag(result.camera_id)
-            tags = f"{measurement},camera_id={cam_id},track_id={v.track_id},unit={v.unit}"
+            tags = (
+                f"{measurement},camera_id={cam_id},track_id={v.track_id},"
+                f"unit={v.unit},{detect_tags}"
+            )
             fields = (
                 f"speed_avg={v.speed_avg},"
                 f"speed_min={v.speed_min},"
@@ -102,7 +112,7 @@ class MetricsService:
             )
             lines.append(f"{tags} {fields} {ts_ns}")
         # Processing summary point
-        tags = f"processing_summary,camera_id={_escape_tag(result.camera_id)}"
+        tags = f"processing_summary,camera_id={_escape_tag(result.camera_id)},{detect_tags}"
         fields = (
             f"vehicle_count={len(result.vehicles)}i,"
             f"processing_time_s={result.processing_time_s},"

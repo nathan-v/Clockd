@@ -11,7 +11,7 @@ import supervision as sv
 
 from clockd.config import CameraConfig, ServerConfig
 from clockd.models import ProcessingResult, VehicleResult
-from clockd.services.detector import create_detector
+from clockd.services.detector import FallbackDetector, create_detector
 from clockd.services.view_transformer import ViewTransformer
 from clockd.utils.units import convert_speed, mph_to_ms
 from clockd.utils.video import MAX_FRAMES, validate_video
@@ -88,10 +88,28 @@ def process_video(
         roboflow_url=server_cfg.roboflow.url,
         roboflow_model_id=server_cfg.roboflow.model_id,
         roboflow_timeout=server_cfg.roboflow.timeout,
+        roboflow_resize_max_px=server_cfg.roboflow.resize_max_px,
         localai_url=server_cfg.localai.url,
         localai_model=server_cfg.localai.model,
         localai_timeout=server_cfg.localai.timeout,
+        coralapi_url=server_cfg.coralapi.url,
+        coralapi_model=server_cfg.coralapi.model,
+        coralapi_timeout=server_cfg.coralapi.timeout,
+        coralapi_resize_max_px=server_cfg.coralapi.resize_max_px,
+        fallback=server_cfg.detection_fallback,
     )
+
+    detection_backend = server_cfg.detection_backend
+    if detection_backend == "roboflow":
+        detection_model = server_cfg.roboflow.model_id
+    elif detection_backend == "localai":
+        detection_model = server_cfg.localai.model
+    elif detection_backend == "coralapi":
+        detection_model = server_cfg.coralapi.model
+    elif detection_backend == "codeproject_ai":
+        detection_model = "server-default"
+    else:
+        detection_model = model_name
 
     if verbose:
         logger.info(
@@ -286,6 +304,12 @@ def process_video(
                 v.last_seen_frame,
             )
 
+    fallback_used = isinstance(detector, FallbackDetector) and detector.using_fallback
+    if fallback_used:
+        detection_backend = "local"
+        detection_model = model_name
+        warnings.append("Remote detection backend unavailable; fell back to local CPU inference")
+
     return ProcessingResult(
         camera_id=camera.camera_id,
         video_filename=video_path.rsplit("/", 1)[-1],
@@ -297,4 +321,7 @@ def process_video(
         vehicles_filtered=filtered_count,
         processing_time_s=processing_time,
         warnings=warnings,
+        detection_backend=detection_backend,
+        detection_model=detection_model,
+        detection_fallback=fallback_used,
     )

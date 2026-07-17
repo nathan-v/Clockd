@@ -36,6 +36,10 @@ class ProcessingResult(BaseModel):
     vehicles_filtered: int = 0  # tracks excluded by min_detections or speed_range
     processing_time_s: float
     warnings: list[str] = []
+    # what actually performed detection (reflects fallback, not just config)
+    detection_backend: str = ""
+    detection_model: str = ""
+    detection_fallback: bool = False
 
 
 class JobStatus(str, Enum):
